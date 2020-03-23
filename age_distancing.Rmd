@@ -19,18 +19,31 @@ data(polymod)
 ```
 
 
-## Column {data-width=150}
+## Column {.sidebar data-width=150}
 ```{r, echo=FALSE}
 sliderInput("R0", "R0:", min = 1.0, max = 5.0, value = 2.8, step = 0.1)
 ```
 
+## Age-specific effects
+
+### Interpretation
+
+The colors in these figures show the expected number of cases and deaths generated in the age group on the y-axis (assuming everyone is fully susceptible) by a single case in the age group on the x-axis. These are *not weighted* by the proportion of the population in each age group, so the rows sum to > $R0$. 
+
 ### Age-specific Infectiousness
+
 ```{r}
 plotOutput("agePlot")
 ```
 
-Column
-----------------------------------------------------
+
+### Age-specific per-case mortality
+
+```{r}
+plotOutput("ageMortPlot")
+```
+
+## Population-level trends 
 
 ###  Daily Prevalence
 
@@ -38,7 +51,7 @@ Column
 plotOutput("prevPlot")
 ```
 
-###  Cumulative Age-Specific Morality
+###  Cumulative Age-Specific Mortality
 
 ```{r, echo=FALSE}
 plotOutput("deathPlot")
@@ -54,7 +67,6 @@ contact_data <- contact_matrix(polymod,
 cmat <- contact_data$matrix
 proportions <- contact_data$demography$proportion
 
-age_mortality <- c(0.0001, 0.0003, 0.0025, 0.025, 0.1, 0.22)
 
 N <-100000*proportions
 S0 <- N
@@ -66,11 +78,16 @@ gamma <- 365/7
 epsilon <- 365/5
 
 
+age_order <- c("[0,5)", "[5,18)", "[18,50)", "[50,65)", "[65,75)", "75+")
+
+age_mortality <- c(0.0001, 0.0003, 0.0025, 0.025, 0.1, 0.22)
+
 num_ag <- length(age_mortality)
 
 xstart <- c(S0, rep(0, num_ag), c(1,rep(0,num_ag-1)), rep(0,num_ag))
 
-age_order <- c("[0,5)", "[5,18)", "[18,50)", "[50,65)", "[65,75)", "75+")
+mort_data <- data.frame(age_group = age_order, mortality = age_mortality)
+
 
 SEIR0 <- function(t,x,parameters){
   xmat <- matrix(x, nrow = 6, ncol = 4)
@@ -151,13 +168,32 @@ cmat_to_df <- function(x) {
   df$age_group <- fct_relevel(df$age_group, age_order)
   df$to_group <- fct_relevel(df$to_group, age_order)  
   
+  df
+  
   return(df)
   
 }
 
+ageData <- reactive({
+   df <- cmat_to_df(input$R0*cmat/avg_c) %>%
+    inner_join(mort_data) %>%
+    mutate(deaths = r * mortality)
+   
+   return(df)
+})
+
 output$agePlot <- renderPlot({
-  df <- cmat_to_df(input$R0*cmat/avg_c)
-  g <- ggplot(df, aes(x=to_group, y=age_group, fill = r)) + 
+  g <- ggplot(ageData(), aes(x=to_group, y=age_group, fill = r)) + 
+    geom_tile() + 
+    xlab("From age group") +
+    ylab("To age group") +
+    coord_equal()
+  
+  return(g)
+})
+
+output$ageMortPlot <- renderPlot({
+  g <- ggplot(ageData(), aes(x=to_group, y=age_group, fill = deaths)) + 
     geom_tile() + 
     xlab("From age group") +
     ylab("To age group") +
