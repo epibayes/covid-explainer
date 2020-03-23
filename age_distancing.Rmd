@@ -13,15 +13,20 @@ require(dplyr)
 require(forcats)
 require(ggplot2)
 require(plotly)
+require(tibble)
+require(tidyr)
 data(polymod)
 ```
 
 
-Inputs {data-width=150}
----------------------------------------------------
-
+## Column {data-width=150}
 ```{r, echo=FALSE}
 sliderInput("R0", "R0:", min = 1.0, max = 5.0, value = 2.8, step = 0.1)
+```
+
+### Age-specific Infectiousness
+```{r}
+plotOutput("agePlot")
 ```
 
 Column
@@ -64,6 +69,8 @@ epsilon <- 365/5
 num_ag <- length(age_mortality)
 
 xstart <- c(S0, rep(0, num_ag), c(1,rep(0,num_ag-1)), rep(0,num_ag))
+
+age_order <- c("[0,5)", "[5,18)", "[18,50)", "[50,65)", "[65,75)", "75+")
 
 SEIR0 <- function(t,x,parameters){
   xmat <- matrix(x, nrow = 6, ncol = 4)
@@ -130,6 +137,31 @@ output$prevPlot <- renderPlot({
 
 output$deathPlot <- renderPlot({
   g <- ggplot(modelResults(), aes(x = t, y = 100*mortality*R/N)) + geom_line(aes(colour=age_group)) + xlab("days") + ylab("Mortality Rate (%)")
+  
+  return(g)
+})
+
+cmat_to_df <- function(x) {
+  
+  df <- x %>%
+    as_tibble() %>%
+    mutate(to_group = colnames(cmat)) %>% 
+    gather(key = "age_group", value="r", -to_group)
+  
+  df$age_group <- fct_relevel(df$age_group, age_order)
+  df$to_group <- fct_relevel(df$to_group, age_order)  
+  
+  return(df)
+  
+}
+
+output$agePlot <- renderPlot({
+  df <- cmat_to_df(input$R0*cmat/avg_c)
+  g <- ggplot(df, aes(x=to_group, y=age_group, fill = r)) + 
+    geom_tile() + 
+    xlab("From age group") +
+    ylab("To age group") +
+    coord_equal()
   
   return(g)
 })
